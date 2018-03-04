@@ -1,0 +1,101 @@
+# the CrateDB-cluster docker-compose file
+# author: andy
+# create: 2018-01-25
+version: '3.1'
+
+services:
+  master:
+    image: crate
+    hostname: master
+    command: -Cnode.name=crate-master -Cthread_pool.bulk.queue_size=5000 -Cbootstrap.memory_lock=true -D-XX:+UseG1GC -Ces.api.enabled=true -Cdiscovery.zen.minimum_master_nodes=2 -Cgateway.recover_after_nodes=2
+    volumes:
+      - /data/crate_master:/data
+
+    environment:
+      - CRATE_HEAP_SIZE=1g
+      - cluster.name=docker-cluster
+      - bootstrap.memory_lock=true
+      - "CRATE_JAVA_OPTS=-Xms1G -Xmx1G"
+      - "CRATE_JAVA_OPTS=-XX:+UseG1GC"
+      - "CRATE_JAVA_OPTS=-server"
+
+    ports:
+      - 4200:4200
+
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+    networks: 
+      - crate_net
+
+  node:
+    image: crate
+    depends_on:
+      - master
+
+    volumes:
+      - /data/crate_node:/data
+    command: -Cnode.name=crate-cluster -Cthread_pool.bulk.queue_size=5000 -Cgateway.recover_after_time=10s -Cbootstrap.memory_lock=true -D-XX:+UseG1GC -Ces.api.enabled=true -Cdiscovery.zen.ping.unicast.hosts=master -Clicense.enterprise=false -Cdiscovery.zen.minimum_master_nodes=2
+
+    environment:
+      - CRATE_HEAP_SIZE=1g
+      - cluster.name=docker-cluster
+      - bootstrap.memory_lock=true
+      - "CRATE_JAVA_OPTS=-Xms1G -Xmx1G"
+      - "CRATE_JAVA_OPTS=-XX:+UseG1GC"
+      - "CRATE_JAVA_OPTS=-server"
+
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+    networks: 
+      - crate_net
+
+  replication:
+    image: crate
+    depends_on:
+      - master
+      - node
+
+    command: -Cnode.name=crate-dataNode -Cthread_pool.bulk.queue_size=5000 -Cgateway.recover_after_time=10s -Cbootstrap.memory_lock=true -D-XX:+UseG1GC -Ces.api.enabled=true -Cdiscovery.zen.ping.unicast.hosts=master, node -Clicense.enterprise=false -Cdiscovery.zen.minimum_master_nodes=2 -Cnode.master=false
+    
+    volumes:
+      - /data/crate_node2:/data
+
+    environment:
+      - CRATE_HEAP_SIZE=1g
+      - cluster.name=docker-cluster
+      - bootstrap.memory_lock=true
+      - "CRATE_JAVA_OPTS=-Xms1G -Xmx1G"
+      - "CRATE_JAVA_OPTS=-XX:+UseG1GC"
+      - "CRATE_JAVA_OPTS=-server"
+
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+    networks: 
+      - crate_net
+
+  kibana:
+    image: kibana:5.6
+    depends_on:
+      - master
+
+    ports:
+      - 5601:5601
+    
+    environment:
+      - "ELASTICSEARCH_URL=http://master:4200"
+
+    networks: 
+      - crate_net
+    
+networks:
+  crate_net:
+    driver: bridge
